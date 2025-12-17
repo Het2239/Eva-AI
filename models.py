@@ -40,8 +40,8 @@ class ModelConfig:
 
 # Primary chat/completion model
 CHAT_MODEL = ModelConfig(
-    provider=Provider.OLLAMA,
-    model_name="phi3:mini",
+    provider=Provider.GROQ,
+    model_name="openai/gpt-oss-120b",
     temperature=0.7,
     max_tokens=2048
 )
@@ -192,7 +192,9 @@ def _groq_chat(prompt: str, model: ModelConfig) -> str:
         model=model.model_name,
         messages=[{"role": "user", "content": prompt}],
         temperature=model.temperature,
-        max_tokens=model.max_tokens
+        max_completion_tokens=model.max_tokens,
+        top_p=1,
+        stream=False,  # Non-streaming for simple response
     )
     return response.choices[0].message.content
 
