@@ -15,6 +15,12 @@ A modular AI assistant with multi-provider LLM support and RAG (Retrieval-Augmen
 - 🧠 **Persistent Memory** - Remember context across sessions
 - 🔧 **Centralized Configuration** - Change models globally from one file
 
+- 📄 **Multi-Format Document Loading** - Parse and extract text from:
+  - Documents: PDF, DOCX, PPTX, XLSX, HTML, Markdown
+  - OpenDocument: ODT, ODP, ODS
+  - Images (OCR): PNG, JPG, TIFF, BMP, WebP
+  - Text: TXT, CSV, JSON, XML, YAML, and more
+
 ## Project Structure
 
 ```
@@ -22,12 +28,16 @@ eva_rag/
 ├── models.py           # Centralized LLM configuration & API
 ├── .env                # API keys (local only, gitignored)
 ├── .env.example        # Template for API keys
-└── eva/
-    ├── eva_pro.sh      # Main CLI interface
-    ├── eva_backend.py  # Ollama integration
-    ├── prompt_template.txt
-    ├── memory.py       # Persistent memory system
-    └── memory.json     # Memory storage
+├── requirements.txt    # Python dependencies
+├── eva/
+│   ├── eva_pro.sh      # Main CLI interface
+│   ├── eva_backend.py  # Ollama integration
+│   ├── prompt_template.txt
+│   ├── memory.py       # Persistent memory system
+│   └── memory.json     # Memory storage
+└── rag/
+    ├── __init__.py     # RAG module exports
+    └── document_loader.py  # Multi-format document loader (Docling)
 ```
 
 ## Quick Start
@@ -116,14 +126,53 @@ HUGGINGFACE_API_KEY=hf_...
 GROQ_API_KEY=gsk_...
 ```
 
+## Document Loading
+
+### Supported Formats
+
+| Category | Formats |
+|----------|--------|
+| Documents | PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS, HTML, MD |
+| OpenDocument | ODT, ODP, ODS |
+| Images (OCR) | PNG, JPG, JPEG, TIFF, BMP, WebP |
+| Text Files | TXT, CSV, JSON, XML, YAML, RST, TEX, LOG |
+
+### Usage
+
+```bash
+# Load any document
+python3 rag/document_loader.py document.pdf
+python3 rag/document_loader.py spreadsheet.xlsx
+
+# List all supported formats
+python3 rag/document_loader.py . --list-formats
+
+# Disable OCR (faster for digital docs)
+python3 rag/document_loader.py document.pdf --no-ocr
+```
+
+```python
+from rag import load_document, load_documents_from_directory
+
+# Load any supported format
+docs = load_document("document.pdf")
+docs = load_document("spreadsheet.xlsx")
+docs = load_document("image.png")  # With OCR
+
+# Load all documents from a directory
+docs = load_documents_from_directory("~/Documents/")
+```
+
 ## Roadmap
 
 - [x] Multi-provider LLM support
 - [x] CLI interface
 - [x] Centralized model configuration
-- [ ] LangChain RAG integration
-- [ ] Web scraping & document ingestion
+- [x] Multi-format document parsing (Docling - IBM Research)
+- [ ] Text chunking & splitting
 - [ ] Vector database (ChromaDB/FAISS)
+- [ ] RAG query pipeline
+- [ ] Web scraping & URL ingestion
 - [ ] Web UI
 
 ## License
