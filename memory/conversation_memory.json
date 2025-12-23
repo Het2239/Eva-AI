@@ -1,0 +1,24 @@
+{
+  "summaries": {
+    "het": {
+      "summary": "The assistant outlined the OZiva Consultation\u2019s interchangeable breakfast choices\u2014vegetable oats, vegetable upma, poha, and mixed sprouts\u2014within a 1,259\u202fkcal daily limit, clarified it is a gender\u2011neutral GPT\u20114 AI, and presented several next\u2011step options. The user responded positively (\u201cok great\u201d), and the assistant reiterated the choices, inviting the user to select a detailed 7\u2011day meal plan, specific recipes/portion guidance, calorie\u2011tracking tips, a complementary workout routine, or any other topic.",
+      "updated": "2025-12-23T18:29:32.865516",
+      "message_count": 34
+    }
+  },
+  "buffers": {
+    "het": [
+      {
+        "role": "user",
+        "content": "ok great",
+        "timestamp": "2025-12-23T18:28:59.834728"
+      },
+      {
+        "role": "assistant",
+        "content": "Great! \ud83d\ude0a  \n\nWhat would you like to dive into next?\n\n- A detailed 7\u2011day meal plan based on the 1,259\u202fkcal target?  \n- Specific recipes or portion\u2011size guidance for any of the breakfast options (vegetable oats, upma, poha, mixed sprouts)?  \n- Tips for tracking calories and macros efficiently?  \n- A workout or activity routine that pairs well with the plan?  \n- Anything else on your mind\u2014maybe a different topic altogether?\n\nJust let me know, and I\u2019ll get right on it!",
+        "timestamp": "2025-12-23T18:28:59.834992"
+      }
+    ]
+  },
+  "last_updated": "2025-12-23T18:29:32.865557"
+}
