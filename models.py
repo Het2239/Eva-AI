@@ -46,10 +46,10 @@ CHAT_MODEL = ModelConfig(
     max_tokens=2048
 )
 
-# Embedding model (for RAG)
+# Embedding model (for RAG) - Best open-source model
 EMBEDDING_MODEL = ModelConfig(
-    provider=Provider.OLLAMA,
-    model_name="nomic-embed-text",  # or "mxbai-embed-large"
+    provider=Provider.HUGGINGFACE,
+    model_name="BAAI/bge-large-en-v1.5",  # Top MTEB performer, 1024 dims
 )
 
 # Reranking model (optional, for RAG)

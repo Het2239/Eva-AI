@@ -354,6 +354,317 @@ def load_documents_from_directory(
 
 
 # ============================================================
+# HYBRID LOADER - CONFIDENCE-BASED ROUTING
+# ============================================================
+
+class HybridDocumentLoader:
+    """
+    Smart document loader with confidence-based routing.
+    
+    Strategy:
+        1. Try Unstructured first (fast)
+        2. Assess extraction quality
+        3. If quality < threshold, fallback to Docling (slower but accurate)
+    
+    This provides the best of both worlds:
+        - Fast extraction for clean digital documents
+        - High-quality OCR fallback for scanned/complex documents
+    """
+    
+    def __init__(
+        self,
+        quality_threshold: float = 0.5,
+        unstructured_strategy: str = "fast",
+        docling_ocr: bool = True,
+        docling_format: ExportFormat = "markdown",
+    ):
+        """
+        Initialize the hybrid loader.
+        
+        Args:
+            quality_threshold: Minimum quality score to accept Unstructured result (0.0-1.0)
+            unstructured_strategy: Strategy for Unstructured ("fast", "hi_res", "auto")
+            docling_ocr: Whether to enable OCR in Docling fallback
+            docling_format: Export format for Docling ("markdown", "text", "json")
+        """
+        self.quality_threshold = quality_threshold
+        self.unstructured_strategy = unstructured_strategy
+        self.docling_ocr = docling_ocr
+        self.docling_format = docling_format
+        
+        # Lazy-load components
+        self._unstructured_loader = None
+        self._docling_loader = None
+        self._quality_assessor = None
+    
+    def _get_unstructured_loader(self):
+        """Get or create UnstructuredLoader."""
+        if self._unstructured_loader is None:
+            from .unstructured_loader import UnstructuredLoader
+            self._unstructured_loader = UnstructuredLoader(
+                strategy=self.unstructured_strategy
+            )
+        return self._unstructured_loader
+    
+    def _get_docling_loader(self):
+        """Get or create DoclingLoader."""
+        if self._docling_loader is None:
+            self._docling_loader = DoclingLoader(
+                export_format=self.docling_format,
+                ocr_enabled=self.docling_ocr,
+            )
+        return self._docling_loader
+    
+    def _get_quality_assessor(self):
+        """Get or create ExtractionQuality assessor."""
+        if self._quality_assessor is None:
+            from .extraction_quality import ExtractionQuality
+            self._quality_assessor = ExtractionQuality()
+        return self._quality_assessor
+    
+    def load(
+        self,
+        file_path: str,
+        verbose: bool = False,
+    ) -> List[Document]:
+        """
+        Load a document with automatic parser selection based on quality.
+        
+        Args:
+            file_path: Path to the document file
+            verbose: Whether to print routing decisions
+            
+        Returns:
+            List of LangChain Document objects
+        """
+        file_path = os.path.expanduser(file_path)
+        ext = Path(file_path).suffix.lower()
+        
+        # For plain text files, use direct loading (no routing needed)
+        if ext in TEXT_EXTENSIONS:
+            docling = self._get_docling_loader()
+            return docling._load_text_file(file_path)
+        
+        # Try Unstructured first
+        unstructured = self._get_unstructured_loader()
+        quality_assessor = self._get_quality_assessor()
+        
+        try:
+            if verbose:
+                print(f"⚡ Trying Unstructured (fast)...")
+            
+            docs = unstructured.load(file_path)
+            
+            if not docs or not docs[0].page_content.strip():
+                raise ValueError("Empty extraction result")
+            
+            # Assess quality
+            metrics = quality_assessor.assess(docs[0].page_content)
+            
+            if verbose:
+                print(f"   Quality score: {metrics.confidence_score:.3f} (threshold: {self.quality_threshold})")
+            
+            if metrics.confidence_score >= self.quality_threshold:
+                # Good quality - use Unstructured result
+                if verbose:
+                    print(f"   ✓ Accepted (fast path)")
+                
+                # Add quality metrics to metadata
+                docs[0].metadata["quality_score"] = round(metrics.confidence_score, 3)
+                docs[0].metadata["routing"] = "fast"
+                return docs
+            
+            if verbose:
+                print(f"   ✗ Quality too low, falling back to Docling...")
+        
+        except Exception as e:
+            if verbose:
+                print(f"   ✗ Unstructured failed: {e}")
+                print(f"   Falling back to Docling...")
+        
+        # Fallback to Docling
+        try:
+            docling = self._get_docling_loader()
+            docs = docling.load(file_path)
+            
+            # Mark as fallback in metadata
+            if docs:
+                docs[0].metadata["parser"] = "docling"
+                docs[0].metadata["routing"] = "fallback"
+                
+                # Assess quality of Docling result
+                metrics = quality_assessor.assess(docs[0].page_content)
+                docs[0].metadata["quality_score"] = round(metrics.confidence_score, 3)
+            
+            if verbose:
+                print(f"   ✓ Docling extraction complete")
+            
+            return docs
+        
+        except Exception as e:
+            raise RuntimeError(f"Both parsers failed for {file_path}: {e}")
+    
+    def load_directory(
+        self,
+        directory: str,
+        recursive: bool = True,
+        show_progress: bool = True,
+        extensions: Optional[List[str]] = None,
+    ) -> List[Document]:
+        """
+        Load all documents from a directory with hybrid routing.
+        
+        Args:
+            directory: Path to the directory
+            recursive: Whether to search subdirectories
+            show_progress: Whether to print progress
+            extensions: List of extensions to include
+            
+        Returns:
+            List of all Document objects
+        """
+        directory = os.path.expanduser(directory)
+        
+        if not os.path.isdir(directory):
+            raise NotADirectoryError(f"Directory not found: {directory}")
+        
+        # Default to all supported formats
+        if extensions is None:
+            extensions = list(ALL_SUPPORTED.keys())
+        else:
+            extensions = [ext if ext.startswith('.') else f'.{ext}' for ext in extensions]
+        
+        # Find all matching files
+        all_files = []
+        for ext in extensions:
+            ext_clean = ext.lstrip('.')
+            pattern = f"**/*.{ext_clean}" if recursive else f"*.{ext_clean}"
+            all_files.extend(Path(directory).glob(pattern))
+        
+        all_files = sorted(set(all_files))
+        
+        if show_progress:
+            print(f"Found {len(all_files)} document(s) in {directory}")
+        
+        all_documents = []
+        fast_count = 0
+        fallback_count = 0
+        
+        for i, file_path in enumerate(all_files):
+            if show_progress:
+                print(f"  [{i+1}/{len(all_files)}] Loading: {file_path.name}")
+            
+            try:
+                docs = self.load(str(file_path), verbose=show_progress)
+                all_documents.extend(docs)
+                
+                # Track routing stats
+                if docs and docs[0].metadata.get("routing") == "fast":
+                    fast_count += 1
+                else:
+                    fallback_count += 1
+                    
+            except Exception as e:
+                print(f"  ⚠ Error loading {file_path.name}: {e}")
+        
+        if show_progress:
+            print(f"✓ Loaded {len(all_documents)} document(s)")
+            print(f"  Fast path: {fast_count}, Fallback: {fallback_count}")
+        
+        return all_documents
+
+
+def load_document_smart(
+    file_path: str,
+    quality_threshold: float = 0.5,
+    verbose: bool = False,
+) -> List[Document]:
+    """
+    Load a document with automatic parser selection.
+    
+    Uses Unstructured for fast extraction, falls back to Docling
+    if extraction quality is below threshold.
+    
+    Args:
+        file_path: Path to document file
+        quality_threshold: Minimum quality score (0.0-1.0)
+        verbose: Whether to print routing decisions
+        
+    Returns:
+        List of Document objects
+    """
+    loader = HybridDocumentLoader(quality_threshold=quality_threshold)
+    return loader.load(file_path, verbose=verbose)
+
+
+def load_documents_smart(
+    directory: str,
+    quality_threshold: float = 0.5,
+    recursive: bool = True,
+    extensions: Optional[List[str]] = None,
+) -> List[Document]:
+    """
+    Load all documents from a directory with smart routing.
+    
+    Args:
+        directory: Path to directory
+        quality_threshold: Minimum quality score (0.0-1.0)
+        recursive: Whether to search subdirectories
+        extensions: List of extensions to include
+        
+    Returns:
+        List of Document objects
+    """
+    loader = HybridDocumentLoader(quality_threshold=quality_threshold)
+    return loader.load_directory(directory, recursive=recursive, extensions=extensions)
+
+
+def load_and_split(
+    file_path: str,
+    chunk_size: int = 1000,
+    semantic: bool = True,
+    quality_threshold: float = 0.5,
+    verbose: bool = False,
+) -> List[Document]:
+    """
+    Load a document and split it into chunks.
+    
+    Combines smart loading (Unstructured + Docling fallback) with
+    semantic or recursive character splitting.
+    
+    Args:
+        file_path: Path to document file
+        chunk_size: Target chunk size (used as min_chunk_size for semantic)
+        semantic: Whether to use semantic splitting (True) or character splitting
+        quality_threshold: Quality threshold for hybrid loader
+        verbose: Whether to print progress
+        
+    Returns:
+        List of Document chunks
+    """
+    # Load the document
+    docs = load_document_smart(file_path, quality_threshold=quality_threshold, verbose=verbose)
+    
+    if not docs:
+        return []
+    
+    if semantic:
+        # Use semantic splitter
+        from .semantic_splitter import SemanticSplitter
+        splitter = SemanticSplitter(min_chunk_size=chunk_size)
+        return splitter.split_documents(docs)
+    else:
+        # Use recursive character splitter
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_size // 10,
+            separators=["\n\n", "\n", ". ", " ", ""],
+        )
+        return splitter.split_documents(docs)
+
+
+# ============================================================
 # CLI INTERFACE
 # ============================================================
 

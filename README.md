@@ -36,8 +36,15 @@ eva_rag/
 │   ├── memory.py       # Persistent memory system
 │   └── memory.json     # Memory storage
 └── rag/
-    ├── __init__.py     # RAG module exports
-    └── document_loader.py  # Multi-format document loader (Docling)
+    ├── __init__.py           # RAG module exports
+    ├── document_loader.py    # Hybrid document loader
+    ├── unstructured_loader.py # Fast document parser
+    ├── extraction_quality.py  # Quality assessment
+    ├── semantic_splitter.py   # Semantic chunking
+    ├── chunk_processor.py     # Filtering & enrichment
+    ├── vector_store.py        # ChromaDB + BM25
+    ├── retriever.py           # Hybrid retrieval + reranking
+    └── rag_pipeline.py        # Full RAG pipeline (ingest → query)
 ```
 
 ## Quick Start
@@ -152,15 +159,68 @@ python3 rag/document_loader.py document.pdf --no-ocr
 ```
 
 ```python
-from rag import load_document, load_documents_from_directory
+from rag import load_document_smart, load_and_split
 
-# Load any supported format
-docs = load_document("document.pdf")
-docs = load_document("spreadsheet.xlsx")
-docs = load_document("image.png")  # With OCR
+# Smart loading (Unstructured → Docling fallback)
+docs = load_document_smart("document.pdf", verbose=True)
+
+# Load and split into semantic chunks
+chunks = load_and_split("document.pdf", chunk_size=1000, semantic=True)
 
 # Load all documents from a directory
+from rag import load_documents_from_directory
 docs = load_documents_from_directory("~/Documents/")
+```
+
+## Semantic Splitting
+
+Documents are split at natural content boundaries using embeddings:
+
+```python
+from rag import SemanticSplitter, semantic_split
+
+# Split text into semantic chunks
+chunks = semantic_split("Your long text here...")
+
+# Or use the class for more control
+splitter = SemanticSplitter(
+    embedding_model="BAAI/bge-large-en-v1.5",
+    breakpoint_threshold=95,  # Percentile for boundary detection
+    min_chunk_size=100,
+)
+chunks = splitter.split_documents(docs)
+```
+
+## RAG Query Pipeline
+
+Ingest documents and ask questions with source citations:
+
+```bash
+# Ingest documents
+python3 rag/rag_pipeline.py ingest document.pdf
+python3 rag/rag_pipeline.py ingest ./documents/
+
+# Ask questions
+python3 rag/rag_pipeline.py ask "What is machine learning?"
+
+# Interactive chat
+python3 rag/rag_pipeline.py chat
+
+# Check status
+python3 rag/rag_pipeline.py status
+```
+
+```python
+from rag import RAGPipeline
+
+# Create pipeline
+rag = RAGPipeline(persist_dir="./rag_data")
+rag.ingest("document.pdf")
+
+# Query with sources
+response = rag.query("What is X?")
+print(response.answer)
+print(response.sources)
 ```
 
 ## Roadmap
@@ -169,9 +229,11 @@ docs = load_documents_from_directory("~/Documents/")
 - [x] CLI interface
 - [x] Centralized model configuration
 - [x] Multi-format document parsing (Docling - IBM Research)
-- [ ] Text chunking & splitting
-- [ ] Vector database (ChromaDB/FAISS)
-- [ ] RAG query pipeline
+- [x] Hybrid loading (Unstructured + Docling fallback)
+- [x] Semantic text chunking (BGE embeddings)
+- [x] Vector database (ChromaDB + BM25)
+- [x] Hybrid retrieval with reranking
+- [x] RAG query pipeline
 - [ ] Web scraping & URL ingestion
 - [ ] Web UI
 

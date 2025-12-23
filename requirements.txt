@@ -8,22 +8,30 @@ python-dotenv>=1.0.0
 groq>=0.37.0
 # openai>=1.0.0        # Uncomment if using OpenAI
 # anthropic>=0.18.0    # Uncomment if using Anthropic
+# ollama>=0.1.0        # For local Ollama (optional)
 
-# For local Ollama (optional - uses subprocess if not installed)
-# ollama>=0.1.0
-
-# RAG Dependencies
+# LangChain Core
 langchain>=0.3.0
 langchain-core>=0.3.0
 langchain-community>=0.3.0
+langchain-text-splitters>=0.3.0
 
-# Document Parsing (Docling - IBM Research)
-# Supports: PDF, DOCX, PPTX, XLSX, HTML, ODT, ODP, ODS, images (OCR), and more
-docling>=2.0.0
+# Semantic Splitting & Embeddings
+langchain-experimental>=0.3.0   # SemanticChunker
+langchain-huggingface>=0.1.0    # HuggingFace embeddings
+sentence-transformers>=2.2.0    # BGE embeddings + CrossEncoder
 
-# Vector Database (upcoming)
-# chromadb>=0.4.0
-# sentence-transformers>=2.2.0
+# Document Parsing
+docling>=2.0.0                  # IBM Research - accurate OCR
+unstructured[pdf]>=0.16.0       # Fast document parsing
+
+# Vector Database & Retrieval
+chromadb>=0.4.0                 # Vector storage
+langchain-chroma>=0.1.0         # LangChain ChromaDB integration
+rank-bm25>=0.2.0                # BM25 sparse retrieval
+
+# Math Query Processing
+sympy>=1.12                     # Math expression parsing
 
 # Web Scraping (upcoming)
 # beautifulsoup4>=4.12.0
