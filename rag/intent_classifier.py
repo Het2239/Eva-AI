@@ -1,102 +1,99 @@
 #!/usr/bin/env python3
 """
-EVA RAG - Intent Classifier
-============================
-Determine whether to use RAG or normal chat.
+EVA Intent Classifier (Extended)
+=================================
+Classify user intent: CHAT, RAG, OS_ACTION, FILE_SEARCH
 """
 
 import sys
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-# Add parent directory to path
 _this_dir = Path(__file__).parent
 if str(_this_dir.parent) not in sys.path:
     sys.path.insert(0, str(_this_dir.parent))
 
 
-# Keywords that suggest document reference
+class Intent(Enum):
+    """User intent types."""
+    CHAT = "chat"
+    RAG = "rag"
+    OS_ACTION = "os_action"
+    FILE_SEARCH = "file_search"
+
+
+# Keywords for different intents
 RAG_KEYWORDS = {
-    # Direct references
     'document', 'documents', 'file', 'files', 'pdf', 'uploaded',
     'notes', 'paper', 'article', 'text', 'content',
-    # Contextual references
     'above', 'earlier', 'mentioned', 'said', 'stated', 'according',
     'based on', 'from the', 'in the', 'what does', 'what did',
-    # Questions about content
-    'summarize', 'summary', 'explain', 'describe', 'list',
-    'find', 'search', 'look for', 'what is', 'how does',
+    'summarize', 'summary',
+}
+
+OS_ACTION_KEYWORDS = {
+    'open', 'launch', 'start', 'run', 'close', 'quit', 'exit',
+    'go to', 'navigate', 'show', 'display',
+}
+
+FILE_SEARCH_KEYWORDS = {
+    'find', 'search', 'look for', 'where is', 'locate',
+    'the file', 'my file', 'that file',
+}
+
+APP_KEYWORDS = {
+    'firefox', 'chrome', 'browser', 'terminal', 'code', 'vscode',
+    'spotify', 'vlc', 'settings', 'files', 'nautilus', 'explorer',
+    'notepad', 'calculator', 'calendar', 'mail', 'email',
+}
+
+FOLDER_KEYWORDS = {
+    'folder', 'directory', 'downloads', 'documents', 'desktop',
+    'pictures', 'videos', 'music', 'home', 'this folder',
 }
 
 
-def needs_rag_keywords(query: str, doc_summary: Optional[str] = None) -> bool:
+def classify_intent(
+    query: str,
+    doc_summary: Optional[str] = None,
+    has_documents: bool = False,
+) -> Intent:
     """
-    Keyword-based intent classification.
+    Classify user intent.
     
-    Args:
-        query: User query
-        doc_summary: Summary of uploaded documents
-        
-    Returns:
-        True if RAG should be used
+    Priority: OS_ACTION > FILE_SEARCH > RAG > CHAT
     """
     query_lower = query.lower()
     
-    # Check for RAG keywords
-    for keyword in RAG_KEYWORDS:
-        if keyword in query_lower:
-            return True
+    # Check for OS actions (open/launch/close)
+    has_os_action = any(kw in query_lower for kw in OS_ACTION_KEYWORDS)
+    has_app = any(kw in query_lower for kw in APP_KEYWORDS)
+    has_folder = any(kw in query_lower for kw in FOLDER_KEYWORDS)
     
-    # Check if query mentions topics from document summary
-    if doc_summary:
-        doc_words = set(doc_summary.lower().split())
-        query_words = set(query_lower.split())
-        
-        # If significant overlap, use RAG
-        overlap = doc_words & query_words
-        # Filter out common words
-        significant_words = {w for w in overlap if len(w) > 4}
-        
-        if len(significant_words) >= 2:
-            return True
+    if has_os_action and (has_app or has_folder):
+        return Intent.OS_ACTION
     
-    return False
-
-
-def needs_rag_llm(
-    query: str,
-    doc_summary: Optional[str] = None,
-) -> bool:
-    """
-    LLM-based intent classification.
+    # Check for file search
+    has_file_search = any(kw in query_lower for kw in FILE_SEARCH_KEYWORDS)
+    if has_file_search:
+        return Intent.FILE_SEARCH
     
-    Args:
-        query: User query
-        doc_summary: Summary of uploaded documents
+    # Check for RAG (if documents available)
+    if has_documents:
+        has_rag = any(kw in query_lower for kw in RAG_KEYWORDS)
+        if has_rag:
+            return Intent.RAG
         
-    Returns:
-        True if RAG should be used
-    """
-    if not doc_summary:
-        return False
+        # Check topic overlap with documents
+        if doc_summary:
+            doc_words = set(doc_summary.lower().split())
+            query_words = set(query_lower.split())
+            overlap = {w for w in (doc_words & query_words) if len(w) > 4}
+            if len(overlap) >= 2:
+                return Intent.RAG
     
-    try:
-        from models import get_chat_response
-        
-        prompt = f"""You are an intent classifier. Determine if the user's question requires information from their uploaded documents.
-
-Document summary: {doc_summary}
-
-User query: {query}
-
-Answer ONLY "YES" if the document should be used to answer, or "NO" if it's a general question.
-Answer:"""
-        
-        response = get_chat_response(prompt).strip().upper()
-        return response.startswith("YES")
-    except:
-        # Fallback to keyword-based
-        return needs_rag_keywords(query, doc_summary)
+    return Intent.CHAT
 
 
 def needs_rag(
@@ -105,50 +102,33 @@ def needs_rag(
     has_documents: bool = False,
     use_llm: bool = False,
 ) -> bool:
-    """
-    Main intent classification function.
-    
-    Args:
-        query: User query
-        doc_summary: Summary of uploaded documents
-        has_documents: Whether session has documents
-        use_llm: Whether to use LLM for classification
-        
-    Returns:
-        True if RAG should be used
-    """
-    # No documents = no RAG
-    if not has_documents:
-        return False
-    
-    # Use LLM or keyword-based
-    if use_llm:
-        return needs_rag_llm(query, doc_summary)
-    else:
-        return needs_rag_keywords(query, doc_summary)
+    """Legacy function for backward compatibility."""
+    intent = classify_intent(query, doc_summary, has_documents)
+    return intent == Intent.RAG
 
 
 # ============================================================
-# CLI INTERFACE
+# CLI
 # ============================================================
 
 if __name__ == "__main__":
-    print("Intent Classifier Test")
+    print("Extended Intent Classifier Test")
     print("=" * 50)
     
-    test_queries = [
-        ("What does the document say about Python?", True),
-        ("Hello, how are you?", False),
-        ("Summarize the uploaded file", True),
-        ("What's the weather like?", False),
-        ("According to the notes, what is X?", True),
-        ("Tell me a joke", False),
-        ("Find the main topics in the paper", True),
+    tests = [
+        ("Open my downloads folder", Intent.OS_ACTION),
+        ("Launch Firefox", Intent.OS_ACTION),
+        ("Find the physics notes", Intent.FILE_SEARCH),
+        ("Where is my resume?", Intent.FILE_SEARCH),
+        ("What does the document say?", Intent.RAG),
+        ("Hello, how are you?", Intent.CHAT),
+        ("Tell me a joke", Intent.CHAT),
+        ("Open the file from yesterday", Intent.FILE_SEARCH),
+        ("Start VS Code", Intent.OS_ACTION),
+        ("Go to desktop", Intent.OS_ACTION),
     ]
     
-    doc_summary = "This document covers Python programming, machine learning, and data science."
-    
-    for query, expected in test_queries:
-        result = needs_rag(query, doc_summary, has_documents=True)
+    for query, expected in tests:
+        result = classify_intent(query, has_documents=True)
         status = "✓" if result == expected else "✗"
-        print(f"{status} '{query[:40]}...' → RAG: {result}")
+        print(f"{status} '{query[:35]}...' → {result.value}")

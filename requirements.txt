@@ -36,8 +36,16 @@ sympy>=1.12                     # Math expression parsing
 # Agent Framework
 langgraph>=0.2.0                # LangGraph for agent orchestration
 
+# Voice & Speech (install with: pip install -r requirements.txt)
+faster-whisper>=0.10.0          # Speech-to-text (Whisper)
+edge-tts>=6.1.0                 # Text-to-speech (Microsoft Edge)
+sounddevice>=0.4.6              # Microphone input
+scipy>=1.11.0                   # Audio processing
+
+# OS Tools
+thefuzz>=0.20.0                 # Fuzzy string matching
+
 # Web Scraping (upcoming)
 # beautifulsoup4>=4.12.0
 # playwright>=1.40.0
 # requests>=2.31.0
-

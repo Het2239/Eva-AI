@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
 
-# EVA PRO — AI Assistant with RAG
-# ================================
+# EVA PRO — Voice-Enabled AI Assistant with RAG
+# ==============================================
 # Commands:
-#   eva ingest <file|dir>  - Ingest documents to RAG
-#   eva ask "question"     - Query RAG knowledge base
-#   eva chat               - Interactive RAG chat
+#   eva voice              - Voice mode (continuous listening)
+#   eva chat               - Interactive text chat
+#   eva ingest <file|dir>  - Ingest to persistent knowledge base
+#   eva ask "question"     - Query persistent knowledge base
 #   eva status             - Show RAG status
-#   eva remember <text>    - Add to memory
-#   eva memory             - Show memory
-#   eva forget             - Clear memory
-#   eva do "task" [files]  - Generate commands
+#   eva do "task" [files]  - Generate shell commands
 #   eva "question"         - Direct LLM chat
 #   eva "question" [files] - Chat with file context
 
@@ -18,26 +16,46 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RAG_DIR="$SCRIPT_DIR/../rag"
 
 # ======================================================
-# RAG COMMANDS
+# VOICE MODE
 # ======================================================
 
-# Ingest documents to RAG
+if [ "$1" = "voice" ]; then
+    shift
+    python3 "$SCRIPT_DIR/voice_agent.py" voice
+    exit 0
+fi
+
+if [ "$1" = "listen" ]; then
+    shift
+    python3 "$SCRIPT_DIR/voice_agent.py" listen
+    exit 0
+fi
+
+# ======================================================
+# AGENT CHAT (Session-based with /ingest, /status, etc.)
+# ======================================================
+
+if [ "$1" = "chat" ]; then
+    shift
+    python3 "$RAG_DIR/agent.py" chat
+    exit 0
+fi
+
+# ======================================================
+# PERSISTENT RAG COMMANDS
+# ======================================================
+
+# Ingest documents to persistent RAG
 if [ "$1" = "ingest" ]; then
     shift
     python3 "$RAG_DIR/rag_pipeline.py" ingest "$@"
     exit 0
 fi
 
-# Ask RAG query
+# Ask RAG query (persistent)
 if [ "$1" = "ask" ]; then
     shift
     python3 "$RAG_DIR/rag_pipeline.py" ask "$@"
-    exit 0
-fi
-
-# Interactive RAG chat
-if [ "$1" = "chat" ]; then
-    python3 "$RAG_DIR/rag_pipeline.py" chat
     exit 0
 fi
 
@@ -48,22 +66,23 @@ if [ "$1" = "status" ]; then
 fi
 
 # ======================================================
-# MEMORY COMMANDS
+# OS TOOLS
 # ======================================================
 
-if [ "$1" = "remember" ]; then
+if [ "$1" = "open" ]; then
     shift
-    python3 "$SCRIPT_DIR/memory.py" add "$@"
+    python3 "$SCRIPT_DIR/os_tools.py" open "$@"
     exit 0
 fi
 
-if [ "$1" = "memory" ]; then
-    python3 "$SCRIPT_DIR/memory.py" read
+if [ "$1" = "find" ]; then
+    shift
+    python3 "$SCRIPT_DIR/os_tools.py" find "$@"
     exit 0
 fi
 
-if [ "$1" = "forget" ]; then
-    python3 "$SCRIPT_DIR/memory.py" clear
+if [ "$1" = "apps" ]; then
+    python3 "$SCRIPT_DIR/os_tools.py" apps
     exit 0
 fi
 
@@ -143,19 +162,28 @@ fi
 # ======================================================
 
 if [ "$1" = "help" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-    echo "EVA - AI Assistant with RAG"
+    echo "EVA - Voice-Enabled AI Assistant"
     echo ""
-    echo "Usage:"
-    echo "  eva ingest <file|dir>  - Ingest documents to knowledge base"
+    echo "Voice Commands:"
+    echo "  eva voice              - Continuous voice mode (say 'EVA' to activate)"
+    echo "  eva listen             - Single voice command"
+    echo ""
+    echo "Chat Commands:"
+    echo "  eva chat               - Interactive text chat"
+    echo ""
+    echo "RAG Commands:"
+    echo "  eva ingest <file|dir>  - Add to knowledge base"
     echo "  eva ask \"question\"     - Query knowledge base"
-    echo "  eva chat               - Interactive RAG chat"
-    echo "  eva status             - Show RAG status"
-    echo "  eva remember <text>    - Add to memory"
-    echo "  eva memory             - Show memory"
-    echo "  eva forget             - Clear memory"
+    echo "  eva status             - Show status"
+    echo ""
+    echo "OS Commands:"
+    echo "  eva open <path>        - Open file/folder"
+    echo "  eva find <query>       - Find files"
+    echo "  eva apps               - List installed apps"
+    echo ""
+    echo "Other:"
     echo "  eva do \"task\" [files]  - Generate shell commands"
     echo "  eva \"question\"         - Direct LLM chat"
-    echo "  eva \"question\" [files] - Chat with file context"
     echo ""
     exit 0
 fi

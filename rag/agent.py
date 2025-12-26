@@ -189,8 +189,19 @@ if __name__ == "__main__":
     if args.command == "ingest":
         agent.ingest(args.path)
     elif args.command == "chat":
+        # Ask for user name
         print("EVA Agent Chat")
         print("=" * 50)
+        
+        if args.user == "default":
+            name = input("Enter your name (or press Enter for guest): ").strip()
+            user_id = name if name else "guest"
+            # Recreate agent with correct user
+            agent = EVAAgent(user_id=user_id)
+        else:
+            user_id = args.user
+        
+        print(f"\nWelcome, {user_id}! 👋")
         print("Commands: /ingest <file>, /status, /end, /quit, /help")
         print()
         
