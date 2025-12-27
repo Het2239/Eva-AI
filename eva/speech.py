@@ -60,8 +60,30 @@ class SpeechToText:
         if self._model is None:
             if not HAS_WHISPER:
                 raise RuntimeError("faster-whisper not installed. Run: pip install faster-whisper")
-            print(f"Loading Whisper {self.model_size} model...")
-            self._model = WhisperModel(self.model_size, compute_type="int8")
+            
+            # Check if CUDA + cuDNN is available for ctranslate2
+            use_gpu = False
+            try:
+                import ctranslate2
+                if "cuda" in ctranslate2.get_supported_compute_types("cuda"):
+                    use_gpu = True
+            except:
+                pass
+            
+            if use_gpu:
+                print(f"Loading Whisper {self.model_size} model (GPU)...")
+                self._model = WhisperModel(
+                    self.model_size,
+                    device="cuda",
+                    compute_type="float16",
+                )
+            else:
+                print(f"Loading Whisper {self.model_size} model (CPU)...")
+                self._model = WhisperModel(
+                    self.model_size,
+                    device="cpu",
+                    compute_type="int8",
+                )
         return self._model
     
     def transcribe(self, audio_path: str) -> str:
@@ -105,6 +127,9 @@ class TextToSpeech:
     
     def speak(self, text: str, play: bool = True) -> str:
         """Generate and optionally play speech."""
+        # Fix pronunciation: EVA -> Eva
+        text = text.replace("EVA", "Eva").replace("E.V.A.", "Eva")
+        
         # Run async
         output_path = asyncio.run(self._speak_async(text))
         

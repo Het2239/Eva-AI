@@ -83,11 +83,7 @@ class VoiceAgent:
         """Handle OS action requests."""
         query_lower = query.lower()
         
-        # Parse action
-        action = None
-        target = None
-        
-        # Open folder
+        # Folder mapping
         folder_map = {
             "downloads": "~/Downloads",
             "documents": "~/Documents",
@@ -99,14 +95,57 @@ class VoiceAgent:
             "this folder": self.os_tools.cwd,
         }
         
-        for name, path in folder_map.items():
-            if name in query_lower and ("open" in query_lower or "go to" in query_lower):
-                result = self.os_tools.open_folder(path)
+        # Check if this is a file search with folder context
+        # e.g., "open physics quiz in documents folder"
+        file_keywords = ["file", "pdf", "document", "image", "video", "photo"]
+        has_file_hint = any(kw in query_lower for kw in file_keywords)
+        
+        if has_file_hint and "open" in query_lower:
+            # Extract the actual file name from the query
+            # Remove action words and file type hints
+            search_query = query_lower
+            # Remove common action/filler words
+            for word in ["open", "a", "the", "file", "named", "called", "with", "name", 
+                         "pdf", "image", "video", "photo", "document"]:
+                search_query = search_query.replace(f" {word} ", " ")
+                search_query = search_query.replace(f"{word} ", "")
+            search_query = search_query.strip()
+            
+            # Keep folder hints for smart_find
+            matches = self.os_tools.smart_find(search_query)
+            if matches:
+                best = matches[0]
+                if best.score >= 50:
+                    result = self.os_tools.open_path(best.path)
+                    return VoiceResponse(
+                        text=f"Opening {best.name}",
+                        intent="file_search",
+                        action_taken=result,
+                    )
+                else:
+                    names = [m.name for m in matches[:3]]
+                    return VoiceResponse(
+                        text=f"I found: {', '.join(names)}. Which one?",
+                        intent="file_search",
+                    )
+            else:
                 return VoiceResponse(
-                    text=f"Opening {name} folder",
-                    intent="os_action",
-                    action_taken=result,
+                    text="I couldn't find that file.",
+                    intent="file_search",
                 )
+        
+        # Open folder only (no file search)
+        for name, path in folder_map.items():
+            pattern = f"{name} folder" if name != "this folder" else name
+            if pattern in query_lower and ("open" in query_lower or "go to" in query_lower):
+                # Only open folder if not searching for a file
+                if not has_file_hint:
+                    result = self.os_tools.open_folder(path)
+                    return VoiceResponse(
+                        text=f"Opening {name} folder",
+                        intent="os_action",
+                        action_taken=result,
+                    )
         
         # Open app
         app_keywords = ["launch", "open", "start", "run"]
@@ -210,30 +249,39 @@ class VoiceAgent:
         """
         Main voice interaction loop.
         
-        Listens for wake word "EVA", processes commands.
+        In voice mode, all commands are processed (no wake word needed).
         """
         print("EVA Voice Mode")
         print("=" * 50)
-        print("Say 'EVA' followed by your command")
-        print("Say 'EVA quit' to exit")
+        print("Just speak your command!")
+        print("Say 'quit' or 'exit' to stop")
         print()
         
-        self.speech.speak("Hello! I'm EVA, your voice assistant. How can I help?")
+        self.speech.speak("Hello! I'm Eva, your voice assistant. How can I help?")
         
         while True:
             try:
                 # Listen
-                command = self.speech.listen_for_command()
+                text = self.speech.listen()
                 
-                if command is None:
+                if not text or len(text.strip()) < 2:
                     continue
+                
+                print(f"Heard: {text}")
+                
+                # Strip wake word if present
+                command = text.strip()
+                for prefix in ["eva ", "eva, ", "hey eva ", "okay eva "]:
+                    if command.lower().startswith(prefix):
+                        command = command[len(prefix):].strip()
+                        break
                 
                 if not command:
                     self.speech.speak("Yes?")
                     continue
                 
                 # Check for quit
-                if command.lower() in ["quit", "exit", "goodbye", "bye"]:
+                if command.lower() in ["quit", "exit", "goodbye", "bye", "stop"]:
                     self.speech.speak("Goodbye!")
                     break
                 
@@ -242,12 +290,15 @@ class VoiceAgent:
                 # Process
                 response = self.process(command)
                 
-                print(f"EVA: {response.text}")
+                print(f"Eva: {response.text}")
                 if response.action_taken:
                     print(f"  [{response.action_taken}]")
                 
-                # Speak response
-                self.speech.speak(response.text)
+                # Speak response (strip "EVA:" prefix)
+                speak_text = response.text
+                if speak_text.upper().startswith("EVA:"):
+                    speak_text = speak_text[4:].strip()
+                self.speech.speak(speak_text)
                 
             except KeyboardInterrupt:
                 print("\nInterrupted")
@@ -303,8 +354,12 @@ if __name__ == "__main__":
         if command:
             print(f"Heard: {command}")
             response = agent.process(command)
+            # Strip "EVA:" prefix for TTS
+            speak_text = response.text
+            if speak_text.startswith("EVA:"):
+                speak_text = speak_text[4:].strip()
             print(f"Response: {response.text}")
-            engine.speak(response.text)
+            engine.speak(speak_text)
     
     else:
         parser.print_help()

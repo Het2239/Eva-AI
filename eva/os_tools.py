@@ -248,7 +248,7 @@ class OSTools:
             "home": "~",
         }
         
-        # Parse folder hints
+        # Parse folder hints and clean query
         search_folders = []
         search_query = query_lower
         
@@ -257,20 +257,30 @@ class OSTools:
                 search_folders.append(os.path.expanduser(path))
                 # Remove folder mention from search query
                 search_query = search_query.replace(f" in {folder}", "")
+                search_query = search_query.replace(f" in the {folder}", "")
                 search_query = search_query.replace(f" or {folder}", "")
+                search_query = search_query.replace(f"{folder} folder", "")
                 search_query = search_query.replace(folder, "")
         
-        # Clean up query
-        search_query = search_query.replace(" folder", "").replace(" file", "")
+        # Clean up query - remove common filler words but keep key terms
+        filler_words = [" folder", " file", " named", " called", " with name", " in the"]
+        for filler in filler_words:
+            search_query = search_query.replace(filler, " ")
         search_query = " ".join(search_query.split()).strip()
         
-        # Default to home + common folders if no hints
+        # Default to common folders if no hints, always include Downloads and Documents
         if not search_folders:
             search_folders = [
-                os.path.expanduser("~"),
                 os.path.expanduser("~/Downloads"),
                 os.path.expanduser("~/Documents"),
+                os.path.expanduser("~"),
             ]
+        else:
+            # Always add Downloads and Documents to search
+            for path in ["~/Downloads", "~/Documents"]:
+                expanded = os.path.expanduser(path)
+                if expanded not in search_folders:
+                    search_folders.append(expanded)
         
         # Search all folders
         all_matches = []
