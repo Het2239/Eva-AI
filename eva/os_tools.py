@@ -458,6 +458,104 @@ class OSTools:
             return f"Closed: {app_name}"
         except Exception as e:
             return f"Error closing {app_name}: {e}"
+    
+    # ========================================
+    # BROWSER / WEB TOOLS
+    # ========================================
+    
+    def open_url(self, url: str, browser: str = "google-chrome") -> str:
+        """
+        Open a URL in browser.
+        
+        Args:
+            url: URL to open (with or without https://)
+            browser: Browser to use (default: google-chrome)
+        """
+        # Add https if missing
+        if not url.startswith("http"):
+            url = f"https://{url}"
+        
+        try:
+            if self._system == "Windows":
+                subprocess.Popen(["start", browser, url], shell=True)
+            elif self._system == "Darwin":
+                subprocess.Popen(["open", "-a", browser, url])
+            else:
+                subprocess.Popen([browser, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            return f"Opened: {url}"
+        except Exception as e:
+            # Fallback to default browser
+            try:
+                subprocess.Popen(["xdg-open", url])
+                return f"Opened: {url}"
+            except:
+                return f"Error opening URL: {e}"
+    
+    def open_website(self, site_name: str) -> str:
+        """
+        Open a common website by name.
+        """
+        # Common site mappings
+        sites = {
+            "youtube": "youtube.com",
+            "youtube music": "music.youtube.com",
+            "google": "google.com",
+            "gmail": "mail.google.com",
+            "github": "github.com",
+            "twitter": "twitter.com",
+            "x": "x.com",
+            "facebook": "facebook.com",
+            "instagram": "instagram.com",
+            "linkedin": "linkedin.com",
+            "reddit": "reddit.com",
+            "netflix": "netflix.com",
+            "spotify": "open.spotify.com",
+            "amazon": "amazon.com",
+            "whatsapp": "web.whatsapp.com",
+            "chatgpt": "chat.openai.com",
+            "google drive": "drive.google.com",
+            "google docs": "docs.google.com",
+            "google maps": "maps.google.com",
+        }
+        
+        site_lower = site_name.lower().strip()
+        
+        # Exact match
+        if site_lower in sites:
+            return self.open_url(sites[site_lower])
+        
+        # Fuzzy match
+        if fuzz:
+            matches = process.extractBests(site_lower, list(sites.keys()), score_cutoff=70, limit=1)
+            if matches:
+                matched = matches[0][0]
+                return self.open_url(sites[matched])
+        
+        # If looks like a URL, open directly
+        if "." in site_name:
+            return self.open_url(site_name)
+        
+        # Search Google
+        return self.open_url(f"google.com/search?q={site_name.replace(' ', '+')}")
+    
+    def play_on_youtube_music(self, query: str) -> str:
+        """
+        Play music on YouTube Music.
+        
+        Opens YouTube Music with a search query.
+        """
+        search_query = query.replace(" ", "+")
+        url = f"https://music.youtube.com/search?q={search_query}"
+        return self.open_url(url)
+    
+    def search_youtube(self, query: str) -> str:
+        """
+        Search on YouTube.
+        """
+        search_query = query.replace(" ", "+")
+        url = f"https://youtube.com/results?search_query={search_query}"
+        return self.open_url(url)
 
 
 # ============================================================

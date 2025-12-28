@@ -61,6 +61,13 @@ class VoiceAgent:
         
         Routes to appropriate handler based on intent.
         """
+        query_lower = query.lower()
+        
+        # Check for web/browser actions first
+        web_result = self._handle_web_action(query_lower)
+        if web_result:
+            return web_result
+        
         intent = self._classify(
             query,
             doc_summary=self.eva.session_rag.doc_summary,
@@ -78,6 +85,72 @@ class VoiceAgent:
                 text=response.answer,
                 intent=intent.value,
             )
+    
+    def _handle_web_action(self, query: str) -> Optional[VoiceResponse]:
+        """
+        Handle web/browser actions.
+        
+        Returns VoiceResponse if handled, None otherwise.
+        """
+        query_lower = query.lower()
+        
+        # Play music on YouTube Music
+        music_triggers = ["play", "play music", "play song", "listen to"]
+        youtube_music_triggers = ["youtube music", "on youtube music", "in youtube music"]
+        
+        is_music_request = any(t in query_lower for t in music_triggers)
+        wants_youtube_music = any(t in query_lower for t in youtube_music_triggers)
+        
+        if is_music_request:
+            # Extract song/artist name
+            search_query = query_lower
+            for word in ["play", "music", "song", "listen", "to", "on", "in", "youtube", "chrome", "google"]:
+                search_query = search_query.replace(f" {word} ", " ")
+                search_query = search_query.replace(f"{word} ", "")
+            search_query = search_query.strip()
+            
+            if search_query:
+                if wants_youtube_music or "music" in query_lower:
+                    result = self.os_tools.play_on_youtube_music(search_query)
+                    return VoiceResponse(
+                        text=f"Playing {search_query} on YouTube Music",
+                        intent="web_action",
+                        action_taken=result,
+                    )
+                else:
+                    result = self.os_tools.search_youtube(search_query)
+                    return VoiceResponse(
+                        text=f"Searching {search_query} on YouTube",
+                        intent="web_action",
+                        action_taken=result,
+                    )
+        
+        # Open website
+        web_triggers = ["open", "go to", "visit", "browse"]
+        site_keywords = ["site", "website", ".com", ".org", ".io", "youtube", "google", 
+                        "gmail", "github", "twitter", "facebook", "instagram", "reddit",
+                        "netflix", "spotify", "amazon", "whatsapp", "chatgpt"]
+        
+        is_web_request = any(t in query_lower for t in web_triggers)
+        has_site = any(s in query_lower for s in site_keywords)
+        
+        if is_web_request and has_site:
+            # Extract site name
+            site_name = query_lower
+            for word in ["open", "go", "to", "visit", "browse", "the", "website", "site", "in", "chrome", "browser"]:
+                site_name = site_name.replace(f" {word} ", " ")
+                site_name = site_name.replace(f"{word} ", "")
+            site_name = site_name.strip()
+            
+            if site_name:
+                result = self.os_tools.open_website(site_name)
+                return VoiceResponse(
+                    text=f"Opening {site_name}",
+                    intent="web_action",
+                    action_taken=result,
+                )
+        
+        return None
     
     def _handle_os_action(self, query: str) -> VoiceResponse:
         """Handle OS action requests."""

@@ -10,6 +10,7 @@ import sys
 import asyncio
 import tempfile
 import wave
+import subprocess
 from pathlib import Path
 from typing import Optional, Callable
 from dataclasses import dataclass
@@ -32,20 +33,30 @@ except ImportError:
 # Text-to-speech
 try:
     import edge_tts
-    HAS_TTS = True
+    HAS_EDGE_TTS = True
 except ImportError:
-    HAS_TTS = False
+    HAS_EDGE_TTS = False
+
+try:
+    import piper
+    HAS_PIPER = True
+except ImportError:
+    HAS_PIPER = False
+
+HAS_TTS = HAS_EDGE_TTS or HAS_PIPER
 
 
 @dataclass
 class SpeechConfig:
     """Speech engine configuration."""
     wake_word: str = "eva"
-    whisper_model: str = "base"  # tiny, base, small, medium, large
-    tts_voice: str = "en-US-AriaNeural"  # Microsoft Edge voice
+    whisper_model: str = "base"
+    tts_engine: str = "piper"  # piper or edge
+    tts_voice: str = "en-US-AriaNeural"  # for edge-tts
+    piper_model: str = str(Path(__file__).parent / "models/piper/en_US-amy-medium.onnx")
     sample_rate: int = 16000
     silence_threshold: float = 0.01
-    silence_duration: float = 1.5  # seconds of silence to stop recording
+    silence_duration: float = 1.5
 
 
 class SpeechToText:
@@ -108,30 +119,54 @@ class SpeechToText:
 
 
 class TextToSpeech:
-    """Text-to-speech using edge-tts."""
+    """Text-to-speech using Piper (local binary)."""
     
-    def __init__(self, voice: str = "en-US-AriaNeural"):
-        self.voice = voice
-    
-    async def _speak_async(self, text: str, output_path: Optional[str] = None) -> str:
-        """Generate speech asynchronously."""
-        if not HAS_TTS:
-            raise RuntimeError("edge-tts not installed. Run: pip install edge-tts")
-        
-        if output_path is None:
-            output_path = tempfile.mktemp(suffix=".mp3")
-        
-        communicate = edge_tts.Communicate(text, self.voice)
-        await communicate.save(output_path)
-        return output_path
+    def __init__(self, config: SpeechConfig):
+        self.config = config
+        self.piper_bin = str(Path(__file__).parent / "bin/piper")
+        if not os.path.exists(self.piper_bin):
+            # Fallback to system piper if available
+            import shutil
+            if shutil.which("piper"):
+                self.piper_bin = "piper"
+            else:
+                print(f"Piper binary not found at {self.piper_bin}")
     
     def speak(self, text: str, play: bool = True) -> str:
         """Generate and optionally play speech."""
-        # Fix pronunciation: EVA -> Eva
+        # Fix pronunciation
         text = text.replace("EVA", "Eva").replace("E.V.A.", "Eva")
         
-        # Run async
-        output_path = asyncio.run(self._speak_async(text))
+        output_path = tempfile.mktemp(suffix=".wav")
+        
+        # Use Piper binary
+        if os.path.exists(self.config.piper_model):
+            try:
+                # echo "text" | piper ...
+                cmd = [
+                    self.piper_bin,
+                    "--model", self.config.piper_model,
+                    "--output_file", output_path
+                ]
+                
+                # Run piper
+                process = subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                stdout, stderr = process.communicate(input=text)
+                
+                if process.returncode != 0:
+                    print(f"Piper failed: {stderr}")
+                elif os.path.getsize(output_path) <= 44:
+                    print("Warning: Piper produced empty audio")
+            except Exception as e:
+                print(f"Error running Piper: {e}")
+        else:
+            print(f"Error: Piper model not found at {self.config.piper_model}")
         
         if play:
             self._play_audio(output_path)
@@ -143,21 +178,38 @@ class TextToSpeech:
         import subprocess
         import platform
         
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            print(f"Error: Audio file empty or missing: {path}")
+            return
+
         system = platform.system()
         try:
             if system == "Linux":
-                # Try mpv, then ffplay, then paplay
-                for player in ["mpv --no-video", "ffplay -nodisp -autoexit", "paplay"]:
+                # Try mpv, then ffplay, then paplay, then aplay
+                players = [
+                    "mpv --no-video", 
+                    "ffplay -nodisp -autoexit", 
+                    "paplay",
+                    "aplay"
+                ]
+                played = False
+                for player in players:
                     try:
+                        cmd = f"{player} {path}"
                         subprocess.run(
-                            f"{player} {path}",
+                            cmd,
                             shell=True,
-                            capture_output=True,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
                             check=True,
                         )
+                        played = True
                         break
                     except:
                         continue
+                
+                if not played:
+                    print("Error: No suitable audio player found (tried mpv, ffplay, paplay, aplay)")
             elif system == "Darwin":
                 subprocess.run(["afplay", path], check=True)
             elif system == "Windows":
@@ -247,7 +299,7 @@ class SpeechEngine:
         self.config = config or SpeechConfig()
         
         self.stt = SpeechToText(self.config.whisper_model)
-        self.tts = TextToSpeech(self.config.tts_voice)
+        self.tts = TextToSpeech(self.config)
         self.recorder = AudioRecorder(
             sample_rate=self.config.sample_rate,
             silence_threshold=self.config.silence_threshold,
@@ -337,8 +389,10 @@ if __name__ == "__main__":
         
         # Test TTS
         print("\n1. Testing TTS...")
-        tts = TextToSpeech()
-        tts.speak("Hello! I am EVA, your AI assistant.")
+        config = SpeechConfig()
+        print(f"Engine: {config.tts_engine}")
+        tts = TextToSpeech(config)
+        tts.speak("Hello! I am Eva, your AI assistant.")
         
         # Test STT
         if HAS_AUDIO and HAS_WHISPER:
