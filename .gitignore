@@ -20,3 +20,8 @@ db/
 .idea/
 *.swp
 *.swo
+
+# Piper TTS (downloaded via setup_voice.sh)
+eva/bin/
+eva/models/piper/*.onnx
+eva/models/piper/*.json
