@@ -51,6 +51,7 @@ APP_KEYWORDS = {
 FOLDER_KEYWORDS = {
     'folder', 'directory', 'downloads', 'documents', 'desktop',
     'pictures', 'videos', 'music', 'home', 'this folder',
+    'drive', 'partition', 'storage', 'disk', 'usb', 'external',
 }
 
 
@@ -71,7 +72,10 @@ def classify_intent(
     has_app = any(kw in query_lower for kw in APP_KEYWORDS)
     has_folder = any(kw in query_lower for kw in FOLDER_KEYWORDS)
     
-    if has_os_action and (has_app or has_folder):
+    # Also detect folder/file open patterns like "open X folder" or "open the X"
+    folder_pattern = 'folder' in query_lower or 'directory' in query_lower
+    
+    if has_os_action and (has_app or has_folder or folder_pattern):
         return Intent.OS_ACTION
     
     # Check for file search

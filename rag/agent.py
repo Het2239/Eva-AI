@@ -270,6 +270,13 @@ EVA:"""
             "this folder": self.os_tools.cwd,
         }
         
+        # Add mounted drives dynamically
+        for drive in self.os_tools.get_mounted_drives():
+            drive_name = drive["name"].lower()
+            folder_map[drive_name] = drive["path"]
+            # Also add common aliases
+            folder_map[drive_name.replace(" ", "")] = drive["path"]
+        
         # Check if this is a file search with folder context
         file_keywords = ["file", "pdf", "document", "image", "video", "photo"]
         has_file_hint = any(kw in query_lower for kw in file_keywords)

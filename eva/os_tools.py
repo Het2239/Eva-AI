@@ -37,10 +37,17 @@ class OSTools:
     NO raw shell access - only whitelisted operations.
     """
     
-    def __init__(self, cwd: Optional[str] = None):
-        """Initialize with current working directory."""
+    def __init__(self, cwd: Optional[str] = None, custom_paths: Optional[Dict[str, str]] = None):
+        """
+        Initialize with current working directory.
+        
+        Args:
+            cwd: Current working directory
+            custom_paths: Custom folder mappings e.g. {"data": "/mnt/data", "projects": "/home/user/Projects"}
+        """
         self._cwd = cwd or os.path.expanduser("~")
         self._system = platform.system()
+        self._custom_paths = custom_paths or {}
     
     # ========================================
     # PROPERTIES
@@ -227,11 +234,72 @@ class OSTools:
         matches.sort(key=lambda x: -x.score)
         return matches[:limit]
     
+    def get_mounted_drives(self) -> List[Dict[str, str]]:
+        """
+        Get list of mounted drives/partitions.
+        
+        Returns:
+            List of {name: str, path: str, type: str}
+        """
+        drives = []
+        
+        if self._system == "Linux":
+            # Check /media/<user>/ for removable drives
+            media_path = f"/media/{os.getenv('USER', 'user')}"
+            if os.path.isdir(media_path):
+                for name in os.listdir(media_path):
+                    full_path = os.path.join(media_path, name)
+                    if os.path.isdir(full_path):
+                        drives.append({
+                            "name": name,
+                            "path": full_path,
+                            "type": "removable"
+                        })
+            
+            # Check /mnt/ for manual mounts
+            mnt_path = "/mnt"
+            if os.path.isdir(mnt_path):
+                for name in os.listdir(mnt_path):
+                    full_path = os.path.join(mnt_path, name)
+                    if os.path.isdir(full_path) and os.listdir(full_path):
+                        drives.append({
+                            "name": name,
+                            "path": full_path,
+                            "type": "mount"
+                        })
+            
+            # Check /run/media/<user>/ (some distros)
+            run_media = f"/run/media/{os.getenv('USER', 'user')}"
+            if os.path.isdir(run_media):
+                for name in os.listdir(run_media):
+                    full_path = os.path.join(run_media, name)
+                    if os.path.isdir(full_path):
+                        drives.append({
+                            "name": name,
+                            "path": full_path,
+                            "type": "removable"
+                        })
+        
+        elif self._system == "Windows":
+            # Get drive letters
+            import string
+            for letter in string.ascii_uppercase:
+                drive = f"{letter}:\\"
+                if os.path.exists(drive):
+                    drives.append({
+                        "name": f"{letter} Drive",
+                        "path": drive,
+                        "type": "local"
+                    })
+        
+        return drives
+    
     def smart_find(self, query: str, limit: int = 10) -> List[FileMatch]:
         """
         Smart file search with folder hints and recursive search.
         
         Parses queries like "mahabharatta in downloads or documents folder"
+        Also searches mounted drives if mentioned.
         """
         query_lower = query.lower()
         
@@ -247,6 +315,17 @@ class OSTools:
             "music": "~/Music",
             "home": "~",
         }
+        
+        # Add mounted drives to folder map
+        for drive in self.get_mounted_drives():
+            drive_name = drive["name"].lower()
+            folder_map[drive_name] = drive["path"]
+            # Also add without spaces for easier matching
+            folder_map[drive_name.replace(" ", "")] = drive["path"]
+        
+        # Add custom paths
+        for name, path in self._custom_paths.items():
+            folder_map[name.lower()] = path
         
         # Parse folder hints and clean query
         search_folders = []
