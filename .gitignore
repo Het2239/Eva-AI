@@ -25,3 +25,6 @@ db/
 eva/bin/
 eva/models/piper/*.onnx
 eva/models/piper/*.json
+
+# File search cache
+file_cache.db

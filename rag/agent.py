@@ -54,6 +54,7 @@ class EVAAgent:
             from rag.conversation_memory import ConversationMemory
             from eva.os_tools import OSTools
             from eva.speech import SpeechEngine
+            from eva.file_search import FileSearchEngine
         except ImportError:
             from session_rag import SessionRAG
             from conversation_memory import ConversationMemory
@@ -61,11 +62,13 @@ class EVAAgent:
             sys.path.append(str(Path(__file__).parent.parent))
             from eva.os_tools import OSTools
             from eva.speech import SpeechEngine
+            from eva.file_search import FileSearchEngine
         
         self.session_rag = SessionRAG()
         self.conv_memory = ConversationMemory(storage_path=memory_path)
         self.os_tools = OSTools()
         self.speech = SpeechEngine()  # For listen/speak capabilities
+        self.file_search = FileSearchEngine(cache_path="file_cache.db")
     
     def ingest(self, path: str, verbose: bool = True) -> str:
         """Ingest documents into session."""
@@ -373,43 +376,44 @@ EVA:"""
         )
 
     def _handle_file_search(self, query: str) -> AgentResponse:
-        """Handle file search requests."""
-        query_lower = query.lower()
-        for prefix in ["find", "search for", "look for", "where is", "locate"]:
-            if query_lower.startswith(prefix):
-                query_lower = query_lower[len(prefix):].strip()
-                break
+        """
+        Handle file search requests using intelligent search.
         
-        for word in ["the", "my", "a"]:
-            query_lower = query_lower.replace(f" {word} ", " ")
+        Flow:
+            Query -> LLM Parse -> Cache Check -> Volume Search -> Results
+        """
+        # Use the intelligent file search engine
+        results = self.file_search.search(query, limit=5, generate_summaries=True)
         
-        search_term = query_lower.strip()
-        
-        if not search_term:
-            return AgentResponse(answer="What file?", used_rag=False, intent="file_search")
-        
-        matches = self.os_tools.smart_find(search_term)
-        
-        if not matches:
+        if not results:
             return AgentResponse(
-                answer=f"I couldn't find any files matching '{search_term}'",
+                answer=f"I couldn't find any files matching your query. Try being more specific.",
                 used_rag=False,
                 intent="file_search"
             )
         
-        best = matches[0]
-        if best.score >= 70:
+        best = results[0]
+        
+        # High confidence - open directly
+        if best.score >= 0.7:
             result = self.os_tools.open_path(best.path)
+            summary_note = f"\n(Summary: {best.summary[:100]}...)" if best.summary else ""
             return AgentResponse(
-                answer=f"Found and opening {best.name}",
+                answer=f"Found and opening {best.name}{summary_note}",
                 used_rag=False,
                 action_taken=result,
                 intent="file_search"
             )
+        
+        # Medium confidence - show options
         else:
-            names = [m.name for m in matches[:3]]
+            options = []
+            for r in results[:3]:
+                summary = f" - {r.summary[:50]}..." if r.summary else ""
+                options.append(f"• {r.name}{summary}")
+            
             return AgentResponse(
-                answer=f"I found these files: {', '.join(names)}. Which one?",
+                answer=f"I found these files:\n" + "\n".join(options) + "\n\nWhich one would you like to open?",
                 used_rag=False,
                 intent="file_search"
             )
